@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dok-node-cleaner
+spec:
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 100%
+    type: RollingUpdate
+  template:
+    metadata:
+    spec:
+      restartPolicy: Always
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+      -
+        name: main
+        image: registry.digitalocean.com/cbr-oci/images/busybox
+        command: ["/bin/sleep", "inf"]
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsUser: 1000
+          runAsGroup:  1000
+          seccompProfile:
+            type: RuntimeDefault
+      initContainers:
+      - 
+        name: clean
+        image: debian:12-slim
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+          - cp /root/script.sh /mnt && df -h /mnt && chroot /mnt /script.sh
+        volumeMounts:
+          - 
+            name: root
+            mountPath: /mnt
+          -
+            name: script
+            mountPath: /root/script.sh
+            subPath: script.sh
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: cbr-oci
+      nodeSelector:
+        kubernetes.io/os: linux
+      schedulerName: default-scheduler
+      tolerations:
+      - operator: Exists
+      volumes:
+      - 
+        name: root
+        hostPath:
+          type: Directory
+          path: /
+      -
+        name: script
+        configMap:
+          name: dko-node-cleaner
+          defaultMode: 0755
